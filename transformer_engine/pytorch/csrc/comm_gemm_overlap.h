@@ -86,6 +86,14 @@ struct UbufCommOverlap : torch::CustomClassHolder, UbufBase {
     cga_size = comm_cga_size;
     _empty_tensor = empty_tensor;
 
+    const char* ext_margin_sm = std::getenv("NVTE_EXT_MARGIN_SM");
+
+    int num_ext_margin_sm = 0;
+    
+    if (ext_margin_sm != NULL){
+        num_ext_margin_sm = atoi(ext_margin_sm);
+    }
+    
     // Allocate and register extra userbuffers
     int ubuf_bytes = sample.numel() * sample.element_size();
     _ub_reg = register_user_buffer_collective(reinterpret_cast<void **>(&_ubuf_ptr), ubuf_bytes,
@@ -122,7 +130,9 @@ struct UbufCommOverlap : torch::CustomClassHolder, UbufBase {
     // Set the number of SMs for GEMM with margin
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
-    _math_sms = (set_sm_margin) ? prop.multiProcessorCount - num_comm_sm : prop.multiProcessorCount;
+    _math_sms = (set_sm_margin) ? prop.multiProcessorCount - num_comm_sm - num_ext_margin_sm: prop.multiProcessorCount;
+    //printf("rachitg math_sms  =  %d  set_sm_margin = %d, num_comm_sm = %d, num_ext_margin_sm=%d\n", _math_sms, set_sm_margin, num_comm_sm, num_ext_margin_sm);
+    
 
     output_tensor = torch::Tensor();
     auto counter_options = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
@@ -566,6 +576,13 @@ struct UbufP2PCommOverlap : torch::CustomClassHolder, UbufBase {
     sms = 1;
     cga_size = 1;
 
+    const char* ext_margin_sm = std::getenv("NVTE_EXT_MARGIN_SM");
+    int num_ext_margin_sm = 0;
+    
+    if (ext_margin_sm != NULL){
+        num_ext_margin_sm = atoi(ext_margin_sm);
+    }
+
     _empty_tensor = empty_tensor;
     // Create workspace tensor with userbuffer
     int ubuf_bytes = sample.numel() * sample.element_size();
@@ -597,7 +614,8 @@ struct UbufP2PCommOverlap : torch::CustomClassHolder, UbufBase {
     // Set the number of SMs for GEMM with margin
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
-    _math_sms = (set_sm_margin) ? prop.multiProcessorCount - num_comm_sm : prop.multiProcessorCount;
+    _math_sms = (set_sm_margin) ? prop.multiProcessorCount - num_comm_sm - num_ext_margin_sm : prop.multiProcessorCount;
+    //printf("math_sms  =  %d  set_sm_margin = %d, num_comm_sm = %d, num_ext_margin_sm=%d\n", _math_sms, set_sm_margin, num_comm_sm, num_ext_margin_sm);
 
     _tp_size = tp_size;
     _aggregate2 = aggregate2;

@@ -5,7 +5,7 @@
 # Configure userbuffers library
 add_library(transformer_engine_userbuffers SHARED
             userbuffers.cu
-            userbuffers-host.cpp)
+            userbuffers-host.cu)
 target_include_directories(transformer_engine_userbuffers PUBLIC
                            "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -26,7 +26,7 @@ target_include_directories(transformer_engine_userbuffers PRIVATE
 
 # Compiler options
 set_source_files_properties(userbuffers.cu
-                            userbuffers-host.cpp
+                            userbuffers-host.cu
                             PROPERTIES
                             COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:-maxrregcount=64>")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")

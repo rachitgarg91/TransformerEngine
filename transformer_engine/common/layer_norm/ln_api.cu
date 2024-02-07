@@ -33,6 +33,16 @@ namespace layer_norm {
 
 using namespace transformer_engine;
 
+
+__global__ void init_buffer(void* ptr, int val, size_t count){
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned char* char_ptr = (unsigned char *) ptr;
+    while (tid < count){
+        *(char_ptr + tid) = (unsigned char)val;
+        tid += gridDim.x * blockDim.x;
+    }
+  }
+
 // Create registries and provide runtime versions of config hash functions.
 
 FwdTunedRegistry FWD_TUNED_FUNCS;
@@ -236,14 +246,19 @@ void layernorm_fwd(const Tensor& x,        // BxSxhidden_size
 
     // Clear buffers
     if ( params.fp8_out ) {
-        cudaMemsetAsync(params.amax, 0,
-                        layer_norm::product(z->amax.shape) *
-                        typeToSize(z->amax.dtype), stream);
+        layer_norm::init_buffer<<<4, 256, 0, stream>>>(params.amax, 0, layer_norm::product(z->amax.shape) *
+                                                typeToSize(z->amax.dtype));
+        //cudaMemsetAsync(params.amax, 0,
+        //                layer_norm::product(z->amax.shape) *
+        //                typeToSize(z->amax.dtype), stream);
     }
     if ( launch_params.barrier_size > 0 ) {
-        cudaMemsetAsync(params.barrier, 0,
-                        layer_norm::product(barrier->data.shape) *
-                        typeToSize(barrier->data.dtype), stream);
+        layer_norm::init_buffer<<<4, 256, 0, stream>>>(params.barrier, 0,  layer_norm::product(barrier->data.shape) *
+                                                typeToSize(barrier->data.dtype));
+
+        //cudaMemsetAsync(params.barrier, 0,
+        //                layer_norm::product(barrier->data.shape) *
+        //                typeToSize(barrier->data.dtype), stream);
     }
 
     // Launch the kernel.
@@ -360,9 +375,11 @@ void layernorm_bwd(const Tensor& dz,
     if ( launch_params.barrier_size > 0 ) {
         params.workspace = workspace->data.dptr;
         params.barrier = reinterpret_cast<int*>(barrier->data.dptr);
-        cudaMemsetAsync(params.barrier, 0,
-                        layer_norm::product(barrier->data.shape) *
-                        typeToSize(barrier->data.dtype), stream);
+        layer_norm::init_buffer<<<4, 256, 0, stream>>>(params.barrier, 0, layer_norm::product(barrier->data.shape) *
+                                           typeToSize(barrier->data.dtype));
+        //cudaMemsetAsync(params.barrier, 0,
+        //                layer_norm::product(barrier->data.shape) *
+        //                typeToSize(barrier->data.dtype), stream);
     }
 
     // Launch the kernel.

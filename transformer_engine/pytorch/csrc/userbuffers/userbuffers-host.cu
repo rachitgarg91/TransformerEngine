@@ -19,6 +19,15 @@
 #include <unistd.h>
 #include <x86intrin.h>
 
+__global__ void init_buffer(void* ptr, int val, size_t count){
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned char* char_ptr = (unsigned char *) ptr;
+  while (tid < count){
+      *(char_ptr + tid) = (unsigned char)val;
+      tid += gridDim.x * blockDim.x;
+  }
+}
+
 static int oob_bcast(void *comm_context, void *buf, int size, int root) {
   MPI_Bcast(buf, size, MPI_BYTE, root,
             (reinterpret_cast<communicator *>(comm_context))->comm_inter);
@@ -273,14 +282,20 @@ int create_communicator_grouped2(communicator **comm, int pipegpus, int pipenode
 
   CUDACHECK(cudaMalloc(&(*comm)->gpu_ptrs,
                        LOCALSIZE));  // flags and pointers, no block data yet
-  CUDACHECK(cudaMemset((*comm)->gpu_ptrs, 0, LOCALSIZE));
+  //CUDACHECK(cudaMemset((*comm)->gpu_ptrs, 0, LOCALSIZE));
+  init_buffer<<<1,1024>>>((*comm)->gpu_ptrs, 0, LOCALSIZE);
+  cudaDeviceSynchronize();
   CUDACHECK(cudaDeviceSynchronize());
   register_user_buffer_collective(&((*comm)->gpu_ptrs), LOCALSIZE,
                                   *comm);  // will use handler 0
   CUDACHECK(cudaMalloc(&(*comm)->send_id, (*comm)->nranks * sizeof(int)));
   CUDACHECK(cudaMalloc(&(*comm)->recv_id, NVTE_MAX_REGIONS * (*comm)->nranks * sizeof(int)));
-  CUDACHECK(cudaMemset((*comm)->send_id, 0, (*comm)->nranks * sizeof(int)));
-  CUDACHECK(cudaMemset((*comm)->recv_id, 0, NVTE_MAX_REGIONS * (*comm)->nranks * sizeof(int)));
+  //CUDACHECK(cudaMemset((*comm)->send_id, 0, (*comm)->nranks * sizeof(int)));
+  init_buffer<<<1,1024>>>((*comm)->send_id, 0, (*comm)->nranks * sizeof(int)); 
+  cudaDeviceSynchronize();
+  //CUDACHECK(cudaMemset((*comm)->recv_id, 0, NVTE_MAX_REGIONS * (*comm)->nranks * sizeof(int)));
+  init_buffer<<<1,1024>>>((*comm)->recv_id, 0, NVTE_MAX_REGIONS * (*comm)->nranks * sizeof(int));
+  cudaDeviceSynchronize();
   (*comm)->sms = 16;
   (*comm)->threads = 1024;
 
@@ -290,7 +305,10 @@ int create_communicator_grouped2(communicator **comm, int pipegpus, int pipenode
 #define GPU_PAGE_MASK (~GPU_PAGE_OFFSET)
   CUDACHECK(cudaMalloc(&(*comm)->flags, 2 * GPU_PAGE_SIZE));
   unsigned int flag = 1;
-  CUDACHECK(cudaMemset((*comm)->flags, 0, 2 * GPU_PAGE_SIZE));
+  //CUDACHECK(cudaMemset((*comm)->flags, 0, 2 * GPU_PAGE_SIZE));
+  init_buffer<<<1,1024>>>((*comm)->flags, 0, 2 * GPU_PAGE_SIZE);
+  cudaDeviceSynchronize();
+
   (*comm)->flags =
       reinterpret_cast<int *>(((CUdeviceptr)(*comm)->flags + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK);
 
